@@ -102,7 +102,7 @@ def add_visit(visit: Visit):
     if not update_resp.data:
         raise HTTPException(status_code=400, detail="Customer update failed")
 
-    return {"message": "Visit and customer updated successfully"}
+    return {"message": "Visit added", "mobile_number": visit.mobile_number}
 
 @app.post("/customers")
 def add_customer(customer: Customer):
