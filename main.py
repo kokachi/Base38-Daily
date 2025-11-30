@@ -12,8 +12,6 @@ app = FastAPI()
 # Load from .env file
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-print("SUPABASE_URL:", repr(SUPABASE_URL))
-print("SUPABASE_KEY:", repr(SUPABASE_KEY))
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
