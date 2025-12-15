@@ -11,7 +11,7 @@ app = FastAPI()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
+printf("These are the supabase URL:",SUPABASE_URL," and KEY:",SUPABASE_KEY)
 #@app.on_event("startup")
 #def verify_supabase_access():
 #    try:
