@@ -75,7 +75,7 @@ def add_visit(visit: Visit):
         raise HTTPException(status_code=400, detail="Visit insert failed.")
 
     # 2. Calculate visit duration in hours
-    fmt = "%H:%M:%S"
+    fmt = "%H:%M:%S" if len(visit.time_in.split(":")) == 3 else "%H:%M"
     time_in = datetime.strptime(visit.time_in, fmt)
     time_out = datetime.strptime(visit.time_out, fmt)
     duration = (time_out - time_in).seconds / 3600.0  # hours
@@ -114,8 +114,8 @@ def add_customer(customer: Customer):
 
 # Delete a visit by ID
 @app.delete("/visits/{visit_id}")
-def delete_visit(visit_id: int):
-    response = supabase.table("visits").delete().eq("visit_id", visit_id).execute()
+def delete_visit(visit_id: str):
+    response = supabase.table("visits").delete().eq("id", visit_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Visit not found or already deleted")
     return {"message": f"Visit {visit_id} deleted successfully"}
