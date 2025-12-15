@@ -14,6 +14,14 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+@app.on_event("startup")
+def verify_supabase_access():
+    try:
+        test = supabase.table("customers").select("mobile_number").limit(1).execute()
+        print("Supabase connection OK. Rows visible:", len(test.data))
+    except Exception as e:
+        print("❌ Supabase permission failure at startup:", str(e))
+        raise
 
 class Visit(BaseModel):
     visit_date: str
