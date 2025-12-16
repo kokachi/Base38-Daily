@@ -1,3 +1,11 @@
+########################################################################
+#BUGS to Fix
+
+#1. Add rollback feature in case visits insertion fails after customer insertion succeeds
+#2. Change SupaBase structure to make sure only Unique names are allowed for Customers ( or we can have customer names auto populated, but then will need a way for operator to change customer name )
+#3. Front End make total_receivable automatic
+#4.
+########################################################################
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -5,13 +13,10 @@ import os
 from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
-
-load_dotenv()
+#Enable the below command if you want to test this locally "http://127.0.0.1:8000"
+#load_dotenv()
 app = FastAPI()
 
-# --------------------------------------------------
-# Supabase setup
-# --------------------------------------------------
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -20,10 +25,6 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("Supabase environment variables not set")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# --------------------------------------------------
-# Models (UNCHANGED)
-# --------------------------------------------------
 
 class Visit(BaseModel):
     visit_date: str
@@ -62,10 +63,6 @@ class AmbiguousCustomerResponse(BaseModel):
     reason: str
     mobile_number: str
     customers: List[AmbiguousCustomer]
-
-# --------------------------------------------------
-# Customers endpoints (UNCHANGED)
-# --------------------------------------------------
 
 @app.get("/customers")
 def get_all_customers():
@@ -112,10 +109,6 @@ def delete_customer(mobile_number: str):
 
     return {"message": "Customer deleted successfully"}
 
-# --------------------------------------------------
-# Visits endpoints (UNCHANGED GETs)
-# --------------------------------------------------
-
 @app.get("/visits")
 def get_all_visits():
     response = supabase.table("visits").select("*").execute()
@@ -143,33 +136,12 @@ def delete_visit(visit_id: str):
 
     return {"message": f"Visit {visit_id} deleted successfully"}
 
-# --------------------------------------------------
-# POST /visits (EXTENDED but BACKWARD SAFE)
-# --------------------------------------------------
-
 @app.post("/visits")
 def add_visit(visit: Visit):
-    # --------------------------------------------------
-    # 1. Insert visit FIRST (original behavior preserved)
-    # --------------------------------------------------
-
-    visit_insert = supabase.table("visits").insert(visit.dict()).execute()
-
-    if not visit_insert.data:
-        raise HTTPException(status_code=400, detail="Visit insert failed")
-
-    # --------------------------------------------------
-    # 2. Calculate visit duration (UNCHANGED)
-    # --------------------------------------------------
-
     fmt = "%H:%M:%S" if len(visit.time_in.split(":")) == 3 else "%H:%M"
     time_in = datetime.strptime(visit.time_in, fmt)
     time_out = datetime.strptime(visit.time_out, fmt)
     duration = (time_out - time_in).seconds / 3600.0
-
-    # --------------------------------------------------
-    # 3. Fetch customers by phone (NEW SAFE LOGIC)
-    # --------------------------------------------------
 
     customer_resp = (
         supabase
@@ -180,7 +152,18 @@ def add_visit(visit: Visit):
     )
 
     customers = customer_resp.data or []
-
+    # Make sure another customer does not exist with the same name in db
+    print(customers)
+    if len(customers) == 1 and customers[0].get("name")!=visit.customer_name:
+        return AmbiguousCustomerResponse(
+            status="error",
+            reason=f"Customer Name does not match from previous Entries Previous Name: {customers[0].get("name")} Current Name: {visit.customer_name}",
+            mobile_number=visit.mobile_number,
+            customers=[
+                AmbiguousCustomer(id=c["mobile_number"], name=c["name"])
+                for c in customers
+            ]
+        )
     if len(customers) == 0:
         new_data= {
             "mobile_number": visit.mobile_number,
@@ -203,25 +186,9 @@ def add_visit(visit: Visit):
             .execute()
     	)
 
-    if len(customers) > 1:
-        return AmbiguousCustomerResponse(
-            status="error",
-            reason="MULTIPLE_CUSTOMERS_FOR_PHONE",
-            mobile_number=visit.mobile_number,
-            customers=[
-                AmbiguousCustomer(id=c["id"], name=c["name"])
-                for c in customers
-            ]
-        )
-
     if len(customers) == 1:
-    	customer = customers[0]
-
-    	# --------------------------------------------------
-    	# 4. Update customer aggregation (UNCHANGED)
-    	# --------------------------------------------------
-
-    	updated_data = {
+        customer = customers[0]
+        updated_data = {
         	"total_money": float(customer["total_money"]) + visit.total_received,
         	"total_hours": float(customer["total_hours"]) + duration,
         	"visit_count": int(customer["visit_count"]) + 1,
@@ -231,19 +198,21 @@ def add_visit(visit: Visit):
             	- datetime.strptime(visit.visit_date, "%Y-%m-%d").date()
         	).days,
         	"loyalty_used_to_date": float(customer["loyalty_used_to_date"]) + visit.loyalty_claimed,
-        	"loyalty_remaining": float(customer["loyalty_remaining"] - visit.loyalty_claimed + (duration/5)) #Calculating loyalty remaining 6th game free
+        	"loyalty_remaining": float(customer["loyalty_remaining"]) - visit.loyalty_claimed + (duration/5) #Calculating loyalty remaining 6th game free
     	}
-
-    	update_resp = (
+        update_resp = (
         	supabase
         	.table("customers")
         	.update(updated_data)
         	.eq("mobile_number", visit.mobile_number)
         	.execute()
     	)
+        if not update_resp.data:
+            raise HTTPException(status_code=400, detail="Customer update failed")
+    visit_insert = supabase.table("visits").insert(visit.dict()).execute()
 
-    	if not update_resp.data:
-        	raise HTTPException(status_code=400, detail="Customer update failed")
+    if not visit_insert.data:
+        raise HTTPException(status_code=400, detail="Visit insert failed")
 
     return {
         "message": "Visit added",
