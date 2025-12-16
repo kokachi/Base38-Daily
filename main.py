@@ -205,3 +205,24 @@ def add_visit(visit: Visit):
         "total_hours": float(customer["total_hours"]) + duration,
         "visit_count": int(customer["visit_count"]) + 1,
         "last_visit_date": visit.visit_date,
+        "last_visit_since": (
+            datetime.today().date()
+            - datetime.strptime(visit.visit_date, "%Y-%m-%d").date()
+        ).days
+    }
+
+    update_resp = (
+        supabase
+        .table("customers")
+        .update(updated_data)
+        .eq("mobile_number", visit.mobile_number)
+        .execute()
+    )
+
+    if not update_resp.data:
+        raise HTTPException(status_code=400, detail="Customer update failed")
+
+    return {
+        "message": "Visit added",
+        "mobile_number": visit.mobile_number
+    }
