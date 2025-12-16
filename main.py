@@ -4,7 +4,9 @@ from supabase import create_client, Client
 import os
 from datetime import datetime
 from typing import List, Optional
+from dotenv import load_dotenv
 
+load_dotenv()
 app = FastAPI()
 
 # --------------------------------------------------
@@ -36,9 +38,6 @@ class Visit(BaseModel):
     total_received: float
     discount_applied: str
     loyalty_claimed: float
-    loyalty_remaining: float
-    total_visits: int
-    loyalty_used_to_date: float
 
 
 class Customer(BaseModel):
@@ -49,6 +48,8 @@ class Customer(BaseModel):
     visit_count: int
     last_visit_since: int
     last_visit_date: str
+    loyalty_remaining: float
+    loyalty_used_to_date: float
 
 
 class AmbiguousCustomer(BaseModel):
@@ -181,7 +182,26 @@ def add_visit(visit: Visit):
     customers = customer_resp.data or []
 
     if len(customers) == 0:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        new_data= {
+            "mobile_number": visit.mobile_number,
+            "name": visit.customer_name,
+            "total_money": visit.total_received,
+            "total_hours": duration,
+            "visit_count": 1,
+            "last_visit_date": visit.visit_date,
+            "last_visit_since": (
+                    datetime.today().date()
+                    - datetime.strptime(visit.visit_date, "%Y-%m-%d").date()
+            ).days,
+            "loyalty_used_to_date": visit.loyalty_claimed,
+            "loyalty_remaining": (duration / 5)
+        }
+        insert_resp = (
+            supabase
+            .table("customers")
+            .insert(new_data)
+            .execute()
+    	)
 
     if len(customers) > 1:
         return AmbiguousCustomerResponse(
@@ -194,33 +214,36 @@ def add_visit(visit: Visit):
             ]
         )
 
-    customer = customers[0]
+    if len(customers) == 1:
+    	customer = customers[0]
 
-    # --------------------------------------------------
-    # 4. Update customer aggregation (UNCHANGED)
-    # --------------------------------------------------
+    	# --------------------------------------------------
+    	# 4. Update customer aggregation (UNCHANGED)
+    	# --------------------------------------------------
 
-    updated_data = {
-        "total_money": float(customer["total_money"]) + visit.total_received,
-        "total_hours": float(customer["total_hours"]) + duration,
-        "visit_count": int(customer["visit_count"]) + 1,
-        "last_visit_date": visit.visit_date,
-        "last_visit_since": (
-            datetime.today().date()
-            - datetime.strptime(visit.visit_date, "%Y-%m-%d").date()
-        ).days
-    }
+    	updated_data = {
+        	"total_money": float(customer["total_money"]) + visit.total_received,
+        	"total_hours": float(customer["total_hours"]) + duration,
+        	"visit_count": int(customer["visit_count"]) + 1,
+        	"last_visit_date": visit.visit_date,
+        	"last_visit_since": (
+            	datetime.today().date()
+            	- datetime.strptime(visit.visit_date, "%Y-%m-%d").date()
+        	).days,
+        	"loyalty_used_to_date": float(customer["loyalty_used_to_date"]) + visit.loyalty_claimed,
+        	"loyalty_remaining": float(customer["loyalty_remaining"] - visit.loyalty_claimed + (duration/5)) #Calculating loyalty remaining 6th game free
+    	}
 
-    update_resp = (
-        supabase
-        .table("customers")
-        .update(updated_data)
-        .eq("mobile_number", visit.mobile_number)
-        .execute()
-    )
+    	update_resp = (
+        	supabase
+        	.table("customers")
+        	.update(updated_data)
+        	.eq("mobile_number", visit.mobile_number)
+        	.execute()
+    	)
 
-    if not update_resp.data:
-        raise HTTPException(status_code=400, detail="Customer update failed")
+    	if not update_resp.data:
+        	raise HTTPException(status_code=400, detail="Customer update failed")
 
     return {
         "message": "Visit added",
