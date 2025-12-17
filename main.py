@@ -13,10 +13,20 @@ import os
 from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
+
 #Enable the below command if you want to test this locally "http://127.0.0.1:8000"
 #load_dotenv()
 app = FastAPI()
 
+#For FASTAPI to work from web client
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # OK for now
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
