@@ -4,7 +4,10 @@
 #1. Add rollback feature in case visits insertion fails after customer insertion succeeds
 #2. Change SupaBase structure to make sure only Unique names are allowed for Customers ( or we can have customer names auto populated, but then will need a way for operator to change customer name )
 #3. Front End make total_receivable automatic
-#4.
+#4. Delete / edit visit
+#5. Show loyalty calculation breakdown
+#6. Add page-size selector (5 / 10 / 20)
+#7. Convert to installable PWA
 ########################################################################
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -120,21 +123,47 @@ def delete_customer(mobile_number: str):
     return {"message": "Customer deleted successfully"}
 
 @app.get("/visits")
-def get_all_visits():
-    response = supabase.table("visits").select("*").execute()
-    return response.data
+def get_all_visits(limit: int = 10, offset: int = 0):
+    response = (
+        supabase
+        .table("visits")
+        .select("*")
+        .order("visit_date", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
+    return {
+        "limit": limit,
+        "offset": offset,
+        "count": len(response.data),
+        "data": response.data
+    }
 
 
 @app.get("/visits/{mobile_number}")
-def get_visits_by_customer(mobile_number: str):
+def get_visits_by_customer(
+    mobile_number: str,
+    limit: int = 10,
+    offset: int = 0
+):
     response = (
         supabase
         .table("visits")
         .select("*")
         .eq("mobile_number", mobile_number)
+        .order("visit_date", desc=True)
+        .range(offset, offset + limit - 1)
         .execute()
     )
-    return response.data
+
+    return {
+        "mobile_number": mobile_number,
+        "limit": limit,
+        "offset": offset,
+        "count": len(response.data),
+        "data": response.data
+    }
+
 
 
 @app.delete("/visits/{visit_id}")
